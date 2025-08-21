@@ -1,0 +1,15 @@
+VAR
+led1=BOOL=%QX0.0=FALSE=NONE
+var1=INT=%M=1=NONE
+var2=INT=%M=2=NONE
+var3=INT=%M=3=NONE
+var4=INT=%M=4=NONE
+END_VAR
+
+IF var1 = 1 AND (var3 <> 4) THEN
+IF var2 >= 1 THEN
+led1 := TRUE
+ELSE
+led2 := FALSE
+END_IF
+END_IF
