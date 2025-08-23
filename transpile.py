@@ -24,34 +24,50 @@ def getDeepSize(obj, seen=None):
 
 def varTranspile(tag):
     pretype = tag.type
+
     replacements = {
         "BOOL": "bool",
         "INT": "int"
     }
+    type = " ".join(replacements.get(word.strip(), word.strip()) for word in pretype.split(" "))
 
     initValue = ""
     if tag.initialValue == "FALSE" or tag.initialValue == "TRUE":
         initValue = tag.initialValue.lower()
+    elif tag.initialValue == "NONE":
+        return f"{type} {tag.name};"
     else:
         initValue = tag.initialValue
 
-    type = " ".join(replacements.get(word.strip(), word.strip()) for word in pretype.split(" "))
     return f"{type} {tag.name} = {initValue};"
 
 def transpile(line, statement):
-    constructed = ""
     if statement == "if":
-        constructed += "if ("
+        content = line.removeprefix("IF").removesuffix("THEN").strip()
+        convertedData = ["if(", ") {"]
+
         replacements = {
-            "IF": "if (",
-            "THEN": ") {",
             "AND": "&&",
             "OR": "||",
             "NOT": "!",
-            "<>": "!="
+            "<>": "!=",
+            "=": "=="
         }
-        operandsContent = " ".join(replacements.get(word.strip(), word.strip()) for word in line.split(" "))
-        print(operandsContent)
+
+        content = " ".join(replacements.get(word.strip(), word.strip()) for word in content.split(" "))
+
+        convertedData.insert(len(convertedData)//2, content)
+        return ''.join(convertedData)
+
+    elif statement == "varChange":
+        replaceLine = line.replace(":=", "=")
+        replacements = {
+            "FALSE": "false",
+            "TRUE": "true"
+        }
+
+        newLine = " ".join(replacements.get(word.strip(), word.strip()) for word in replaceLine.split(" "))
+        print(newLine)
 
 @dataclass
 class Tag:
@@ -99,8 +115,24 @@ with open("code.c", "a") as f:
     for tag in tagTable:
         f.write(f"{varTranspile(tag)}\n")
 
+print("\n" *2)
 for l in allLines:
     if l.startswith("IF") and l.endswith("THEN"):
         print("Detected a IF-statement")
+        print(transpile(l, "if"))
 
+    elif ":=" in l:
+        isVar = False
+        inside = False
+        for x in l:
+            if x == "(":
+                inside = True
+            elif x == ")":
+                inside = False
+
+            if x == ":" and not inside:
+                isVar = True
+
+        if isVar:
+            transpile(l, "varChange")
 
