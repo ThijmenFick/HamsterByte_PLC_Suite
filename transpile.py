@@ -62,12 +62,13 @@ def transpile(line, statement):
     elif statement == "varChange":
         replaceLine = line.replace(":=", "=")
         replacements = {
-            "FALSE": "false",
-            "TRUE": "true"
+            "FALSE;": "false;",
+            "TRUE;": "true;"
         }
 
         newLine = " ".join(replacements.get(word.strip(), word.strip()) for word in replaceLine.split(" "))
-        print(newLine)
+        with open("code.c", "a") as f:
+            f.write(f"{newLine}\n")
 
 @dataclass
 class Tag:
