@@ -97,7 +97,13 @@ with open("code.txt") as f:
         if insideBlock:
             linesBetween.append(line.strip())
             newVar = line.strip().split("=")
-            newTag = Tag(newVar[0], newVar[1], newVar[2], newVar[3], newVar[4])
+            print(newVar)
+            if newVar[1] == "TP":
+                newTag = Tag(newVar[0], "int", newVar[2], newVar[3], newVar[4])
+
+            else:
+                newTag = Tag(newVar[0], newVar[1], newVar[2], newVar[3], newVar[4])
+
             tagTable.append(newTag)
 
 #Load in all tags into memory, change with tag_values["var"] = 2
