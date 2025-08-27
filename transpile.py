@@ -62,13 +62,11 @@ def transpile(line, statement):
     elif statement == "varChange":
         replaceLine = line.replace(":=", "=")
         replacements = {
-            "FALSE;": "false;",
-            "TRUE;": "true;"
+            "FALSE": "false",
+            "TRUE": "true"
         }
 
         newLine = " ".join(replacements.get(word.strip(), word.strip()) for word in replaceLine.split(" "))
-        with open("code.c", "a") as f:
-            f.write(f"{newLine}\n")
 
 @dataclass
 class Tag:
@@ -98,7 +96,12 @@ with open("code.txt") as f:
         if insideBlock:
             linesBetween.append(line.strip())
             newVar = line.strip().split("=")
-            newTag = Tag(newVar[0], newVar[1], newVar[2], newVar[3], newVar[4])
+            if newVar[1] == "TP":
+                newTag = Tag(newVar[0], "int", newVar[2], newVar[3], newVar[4])
+
+            else:
+                newTag = Tag(newVar[0], newVar[1], newVar[2], newVar[3], newVar[4])
+
             tagTable.append(newTag)
 
 #Load in all tags into memory, change with tag_values["var"] = 2
@@ -116,7 +119,8 @@ with open("code.c", "a") as f:
     for tag in tagTable:
         f.write(f"{varTranspile(tag)}\n")
 
-print("\n" *2)
+#======== Generating code (non runtime loop) ========#
+
 for l in allLines:
     if l.startswith("IF") and l.endswith("THEN"):
         print("Detected a IF-statement")
@@ -136,4 +140,6 @@ for l in allLines:
 
         if isVar:
             transpile(l, "varChange")
+
+    elif ""
 
