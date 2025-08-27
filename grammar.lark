@@ -1,0 +1,957 @@
+// Beckhoff-flavor IEC61131-3 Lark grammar
+// Part of the blark project by Ken Lauer (@klauer) and contributors.
+//
+// For full license information, see the packaged LICENSE file.
+
+?start: iec_source
+
+// Global settings
+
+PRAGMA: /(?s){[^}]*?}/ ";"*
+MULTI_LINE_COMMENT: "(*" /.*?/s "*)"
+SINGLE_LINE_COMMENT: /\s*/ "//" /[^\n]/*
+
+%import common.WS
+
+%ignore WS
+%ignore MULTI_LINE_COMMENT
+%ignore SINGLE_LINE_COMMENT
+%ignore PRAGMA
+
+// B.0
+iec_source: _library_element_declaration*
+
+_library_element_declaration: data_type_declaration
+                            | function_declaration
+                            | function_block_type_declaration
+                            | function_block_method_declaration
+                            | function_block_property_declaration
+                            | interface_declaration
+                            | program_declaration
+                            | global_var_declarations
+                            | action
+                            | ";"
+
+// B.1.1
+// Identifiers need to ignore certain keywords, but NOT typenames, as those may be used
+// 'as values' with SIZEOF for example
+IDENTIFIER: /\b(?!(ABSTRACT|ACTION|AND|AND_THEN|AT|BY|CASE|CONTINUE|DO|ELSE|ELSIF|END_ACTION|END_CASE|END_FOR|END_FUNCTION|END_FUNCTIONBLOCK|END_FUNCTION_BLOCK|END_IF|END_INTERFACE|END_METHOD|END_PROGRAM|END_PROPERTY|END_REPEAT|END_STRUCT|END_TYPE|END_UNION|END_VAR|END_WHILE|EXIT|EXTENDS|FINAL|FOR|FUNCTION|FUNCTIONBLOCK|FUNCTION_BLOCK|IF|IMPLEMENTS|INTERFACE|INTERNAL|JMP|METHOD|MOD|NOT|OF|OR|OR_ELSE|PERSISTENT|PRIVATE|PROGRAM|PROPERTY|PROTECTED|PUBLIC|READ_ONLY|READ_WRITE|REFERENCE|REPEAT|RETURN|STRUCT|THEN|TO|TYPE|UNION|UNTIL|VAR|VAR_ACCESS|VAR_EXTERNAL|VAR_GLOBAL|VAR_INPUT|VAR_INST|VAR_IN_OUT|VAR_OUTPUT|VAR_STAT|VAR_TEMP|WHILE|XOR)\b)[A-Za-z_][A-Za-z0-9_]*\b/i
+
+// B.1.2
+constant.1: time_literal
+          | numeric_literal
+          | string_literal
+          | bit_string_literal
+          | boolean_literal
+
+// B.1.2.1
+BIT_STRING: /(1|0)(_?(1|0))*/
+OCTAL_STRING: /[0-7][0-7_]*/
+HEX_STRING: /[0-9A-F][0-9A-F_]*/i
+
+INTEGER: /[0-9][0-9_]*/
+SIGN: "+" | "-"
+SIGNED_INTEGER: SIGN INTEGER
+FIXED_POINT: INTEGER "." INTEGER
+
+EXPONENT: "E"i /(\+|\-)?[0-9](_?[0-9])*/
+
+?numeric_literal: real_literal
+                | integer_literal
+
+integer_literal: [ INTEGER_TYPE_NAME "#" ] any_integer
+
+?any_integer: "2#" BIT_STRING             -> binary_integer
+            | "8#" OCTAL_STRING           -> octal_integer
+            | "16#" HEX_STRING            -> hex_integer
+            | SIGNED_INTEGER              -> signed_integer
+            | integer
+
+integer: [ "10#" ] INTEGER
+
+real_literal: [ REAL_TYPE_NAME "#" ] /((\+|\-)?[0-9](_?[0-9])*)\.([0-9](_?[0-9])*)((e|E)(\+|\-)?([0-9](_?[0-9])*))?/
+            | [ REAL_TYPE_NAME "#" ] /((\+|\-)?[0-9](_?[0-9])*)((e|E)(\+|\-)?([0-9](_?[0-9])*))/
+
+bit_string_literal: [ BIT_STRING_TYPE_NAME "#" ] "2#" BIT_STRING    -> binary_bit_string_literal
+                  | [ BIT_STRING_TYPE_NAME "#" ] "8#" OCTAL_STRING  -> octal_bit_string_literal
+                  | [ BIT_STRING_TYPE_NAME "#" ] "16#" HEX_STRING   -> hex_bit_string_literal
+                  | [ BIT_STRING_TYPE_NAME "#" ] INTEGER
+
+boolean_literal: ( "BOOL#"i )? TRUE_VALUE   -> true
+               | ( "BOOL#"i )? FALSE_VALUE  -> false
+
+TRUE_VALUE: "1" | "TRUE"i
+FALSE_VALUE: "0" | "FALSE"i
+
+// B.1.2.2
+string_literal: SINGLE_BYTE_CHARACTER_STRING
+              | DOUBLE_BYTE_CHARACTER_STRING
+
+ESCAPE_CHARACTER: "$$"
+                | "$L"
+                | "$N"
+                | "$P"
+                | "$R"
+                | "$T"
+                | "$l"
+                | "$n"
+                | "$p"
+                | "$r"
+                | "$t"
+
+SINGLE_BYTE_CHARACTER: /[^$']/
+                     | ESCAPE_CHARACTER
+                     | "$'"
+                     | "$" /[0-9A-F][0-9A-F]/
+
+DOUBLE_BYTE_CHARACTER: /[^$"]/
+                     | ESCAPE_CHARACTER
+                     | "$\""
+                     | "$" /[0-9A-F][0-9A-F][0-9A-F][0-9A-F]/
+
+SINGLE_BYTE_CHARACTER_STRING: "'" SINGLE_BYTE_CHARACTER* "'"
+DOUBLE_BYTE_CHARACTER_STRING: "\"" DOUBLE_BYTE_CHARACTER* "\""
+
+// B.1.2.3
+?time_literal: duration
+             | lduration
+             | time_of_day
+             | date
+             | date_and_time
+
+// B.1.2.3.1
+duration: ( "TIME"i | "T"i ) "#" [ MINUS ] _interval
+lduration: ( "LTIME"i | "LT"i ) "#" [ MINUS ] _linterval
+
+_interval: days
+         | hours
+         | minutes
+         | seconds
+         | milliseconds
+
+_linterval: days
+          | hours
+          | minutes
+          | seconds
+          | milliseconds
+          | microseconds
+          | nanoseconds
+
+days: FIXED_POINT "d"i
+    | INTEGER "d"i "_"? hours
+    | INTEGER "d"i
+
+hours: FIXED_POINT "h"i
+     | INTEGER "h"i "_"? minutes
+     | INTEGER "h"i
+
+minutes: FIXED_POINT "m"i
+       | INTEGER "m"i "_"? seconds
+       | INTEGER "m"i
+
+seconds: FIXED_POINT "s"i
+       | INTEGER "s"i "_"? milliseconds
+       | INTEGER "s"i
+
+milliseconds: FIXED_POINT "ms"i
+            | INTEGER "ms"i
+
+microseconds: FIXED_POINT "us"i
+            | INTEGER "us"i
+
+nanoseconds: FIXED_POINT "ns"i
+           | INTEGER "ns"i
+
+// B.1.2.3.2
+_daytime: day_hour ":" day_minute [ ":" day_second ]
+
+time_of_day: ("TIME_OF_DAY"i | "TOD"i) "#" _daytime
+ltime_of_day: ("LTIME_OF_DAY"i | "LTOD"i) "#" _daytime
+
+?day_hour: INTEGER
+?day_minute: INTEGER
+?day_second: INTEGER
+           | FIXED_POINT
+
+date: ( "DATE"i | "D"i | "d"i ) "#" _date_literal
+ldate: "LDATE"i "#" _date_literal
+
+_date_literal: year "-" month "-" day
+
+?year: INTEGER
+?month: INTEGER
+?day: INTEGER
+
+date_and_time: ( "DATE_AND_TIME"i | "DT"i ) "#" _date_literal "-" _daytime
+ldate_and_time: ( "LDATE_AND_TIME"i | "LDT"i ) "#" _date_literal "-" _daytime
+
+// B.1.3
+non_generic_type_name: [ pointer_type ] ( elementary_type_name | derived_type_name | DOTTED_IDENTIFIER )
+
+// B.1.3.1
+TYPE_TOD: _TIME_OF_DAY
+        | _TOD
+TYPE_DATETIME: _DATE_AND_TIME
+             | _DT
+TYPE_LTOD: _LTIME_OF_DAY
+         | _LTOD
+TYPE_LDATETIME: _LDATE_AND_TIME
+              | _LDT
+
+?elementary_type_name: NUMERIC_TYPE_NAME
+                     | DATE_TYPE_NAME
+                     | BIT_STRING_TYPE_NAME
+                     | string_type_specification
+
+NUMERIC_TYPE_NAME: INTEGER_TYPE_NAME
+                 | REAL_TYPE_NAME
+
+INTEGER_TYPE_NAME: SIGNED_INTEGER_TYPE_NAME
+                 | UNSIGNED_INTEGER_TYPE_NAME
+
+SIGNED_INTEGER_TYPE_NAME: _SINT
+                        | _INT
+                        | _DINT
+                        | _LINT
+
+UNSIGNED_INTEGER_TYPE_NAME: _USINT
+                          | _UINT
+                          | _UDINT
+                          | _ULINT
+REAL_TYPE_NAME: _REAL
+              | _LREAL
+
+DATE_TYPE_NAME: TYPE_TOD
+              | TYPE_DATETIME
+              | TYPE_LTOD
+              | TYPE_LDATETIME
+              | _DATE
+              | _LDATE
+              | _TIME
+              | _LTIME
+
+BIT_STRING_TYPE_NAME: _BOOL
+                    | _BYTE
+                    | _WORD
+                    | _DWORD
+                    | _LWORD
+
+// B.1.3.2
+GENERIC_TYPE_NAME: _ANY
+                 | _ANY_DERIVED
+                 | _ANY_ELEMENTARY
+                 | _ANY_MAGNITUDE
+                 | _ANY_NUM
+                 | _ANY_REAL
+                 | _ANY_INT
+                 | _ANY_BIT
+                 | _ANY_STRING
+                 | _ANY_DATE
+
+// B.1.3.3
+?simple_type_name: IDENTIFIER
+?subrange_type_name: IDENTIFIER
+?enumerated_type_name: IDENTIFIER
+?array_type_name: IDENTIFIER
+?structure_type_name: IDENTIFIER
+                    | DOTTED_IDENTIFIER
+?structure_element_name: IDENTIFIER
+?string_type_name: IDENTIFIER
+
+?structure_type_name_declaration: IDENTIFIER
+
+POINTER_TO: /\bPOINTER\b\s+\bTO\b/i
+REFERENCE_TO: /\bREFERENCE\b\s+\bTO\b/i
+
+?derived_type_name: single_element_type_name
+                  | array_type_name
+                  | structure_type_name
+                  | string_type_name
+
+?single_element_type_name: simple_type_name
+                         | subrange_type_name
+                         | enumerated_type_name
+
+data_type_declaration: _TYPE [ access_specifier ] [ _type_declaration ] ";"* _END_TYPE ";"*
+
+_type_declaration: array_type_declaration
+                 | structure_type_declaration
+                 | union_type_declaration
+                 | string_type_declaration
+                 | simple_type_declaration
+                 | subrange_type_declaration
+                 | enumerated_type_declaration
+
+simple_type_declaration: simple_type_name [ extends ] ":" simple_spec_init
+
+indirection_type: REFERENCE_TO
+                | POINTER_TO+
+                | REFERENCE_TO POINTER_TO+
+pointer_type: POINTER_TO+
+
+simple_spec_init: ( simple_specification | indirect_simple_specification ) [ ":=" expression ]
+
+simple_specification: elementary_type_name
+                    | simple_type_name
+                    | DOTTED_IDENTIFIER
+
+subrange_type_declaration: subrange_type_name ":" subrange_spec_init
+
+subrange_spec_init: [ indirection_type ] subrange_specification [ ":=" expression ]
+
+subrange_specification: INTEGER_TYPE_NAME "(" subrange ")"
+                      | subrange_type_name
+
+subrange: expression ".." expression
+        | "*"                        -> full_subrange
+
+enumerated_type_declaration: enumerated_type_name ":" enumerated_spec_init
+
+enumerated_spec_init: [ indirection_type ] enumerated_specification [ ":=" enumerated_value ]
+
+enumerated_specification: "(" enumerated_value ( "," enumerated_value )* ")" [ ENUM_DATA_TYPE_NAME ]
+                        | enumerated_type_name
+
+enumerated_value: [ enumerated_type_name "#" ] DOTTED_IDENTIFIER [ ":=" integer_constant_or_func ]
+
+?integer_constant_or_func: integer_literal
+                         | function_call
+                         | DOTTED_IDENTIFIER
+
+// The following is a Beckhoff extensions of the IEC61131-3 standard
+// https://infosys.beckhoff.com/english.php?content=../content/1033/tc3_plc_intro/2529504395.html
+ENUM_DATA_TYPE_NAME: INTEGER_TYPE_NAME
+                   | BIT_STRING_TYPE_NAME
+
+array_type_declaration: array_type_name ":" array_spec_init
+
+array_spec_init: [ indirection_type ] array_specification [ ":=" array_initialization ]
+
+array_specification: _ARRAY "[" subrange ( "," subrange )* "]" _OF _array_spec_type
+
+_array_spec_type: string_type_specification
+                | function_call
+                | non_generic_type_name
+                | object_initializer_array
+                | array_specification
+
+object_initializer_array: function_block_type_name "[" structure_initialization ( "," structure_initialization )* "]"
+
+array_initialization: "[" array_initial_element ( "," array_initial_element )* "]" -> bracketed_array_initialization
+                    | array_initial_element ( "," array_initial_element )*         -> bare_array_initialization
+
+array_initial_element: ( integer | enumerated_value ) "(" [ _array_initial_element ] ")" -> array_initial_element_count
+                     | _array_initial_element
+
+_array_initial_element: expression
+                      | structure_initialization
+                      | enumerated_value
+                      | array_initialization
+
+structure_type_declaration: structure_type_name_declaration [ extends ] ":" [ indirection_type ] _STRUCT ";"* ( structure_element_declaration ";"+ )* _END_STRUCT
+
+initialized_structure: structure_type_name ":=" structure_initialization
+
+structure_element_declaration: var1_list ":" ( initialized_structure | array_spec_init | simple_spec_init | subrange_spec_init | enumerated_spec_init | function_call )
+
+union_element_declaration: structure_element_name ":" ( array_specification | simple_specification | indirect_simple_specification | subrange_specification | enumerated_specification )
+
+union_type_declaration: structure_type_name_declaration [ extends ] ":" _UNION ( union_element_declaration ";"+ )* _END_UNION ";"*
+
+structure_initialization: "(" structure_element_initialization ( "," structure_element_initialization )* ")"
+
+structure_element_initialization: constant
+                                | structure_element_name ":=" ( constant | expression | enumerated_value | array_initialization | structure_initialization )
+
+string_type_declaration: string_type_name ":" string_type_specification [ ":=" string_literal ]
+
+// B.1.4
+_variable: direct_variable
+         | symbolic_variable
+
+?symbolic_variable: multi_element_variable
+                  | variable_name
+
+variable_name: IDENTIFIER [ DEREFERENCED ]
+
+// B.1.4.1
+direct_variable: "%" LOCATION_PREFIX [ SIZE_PREFIX ] INTEGER ( "." INTEGER )*
+
+LOCATION_PREFIX: "I"i
+               | "Q"i
+               | "M"i
+
+SIZE_PREFIX: "X"i
+           | "B"i
+           | "W"i
+           | "D"i
+           | "L"i
+
+// B.1.4.2
+DEREFERENCED: "^"
+
+_subscript: expression
+subscript_list: "[" _subscript ( "," _subscript )* "]" [ DEREFERENCED ]
+
+// TODO: special 'bit_selector' for the last field
+field_selector: [ DEREFERENCED ] "." ( variable_name | INTEGER )
+
+multi_element_variable: variable_name ( subscript_list | field_selector )+
+
+// B.1.4.3
+
+F_EDGE: /\bF_EDGE\b/i
+R_EDGE: /\bR_EDGE\b/i
+
+?fb_name: IDENTIFIER
+
+VAR_ATTRIB: /\bRETAIN\b/i
+          | /\bNON_RETAIN\b/i
+          | /\bPERSISTENT\b/i
+          | /\bCONSTANT\b/i
+
+variable_attributes: VAR_ATTRIB+
+
+input_declarations: _VAR_INPUT [ variable_attributes ] _var_input_body _END_VAR ";"*
+
+output_declarations: _VAR_OUTPUT [ variable_attributes ] var_body _END_VAR ";"*
+
+input_output_declarations: _VAR_IN_OUT [ variable_attributes ] var_body _END_VAR ";"*
+
+_var_input_body: ( _var_input_body_item ";"+ )*
+
+_var_input_body_item: var_init_decl
+                    | edge_declaration
+
+var1: variable_name [ location ]
+    | variable_name [ incomplete_location ]
+
+var1_list: var1 ( "," var1 )*
+
+edge_declaration: var1_list ":" _BOOL ( R_EDGE | F_EDGE )
+
+?var_init_decl: array_var_init_decl
+              | structured_var_init_decl
+              | var1_init_decl
+              | fb_decl
+
+var1_init_decl: var1_list ":" ( simple_spec_init | subrange_spec_init | enumerated_spec_init )
+
+array_var_init_decl: var1_list ":" array_spec_init
+
+structured_var_init_decl: var1_list ":" initialized_structure
+
+// Function blocks
+fb_decl: fb_decl_name_list ":" function_block_type_name [ ":=" structure_initialization ] -> fb_name_decl
+       | fb_decl_name_list ":" function_call [ ":=" structure_initialization ]            -> fb_invocation_decl
+
+fb_decl_name_list: fb_name ( "," fb_name )*
+
+var_body: ";"* ( var_init_decl ";"+ )*
+
+array_var_declaration: var1_list ":" array_specification
+
+var_declarations: _VAR [ variable_attributes ] var_body _END_VAR ";"*
+
+static_var_declarations: _VAR_STAT [ variable_attributes ] var_body _END_VAR ";"*
+
+located_var_declarations: _VAR [ variable_attributes ] located_var_decl* _END_VAR ";"*
+
+located_var_decl: [ variable_name ] location ":" _located_var_spec_init ";"+
+
+external_var_declarations: _VAR_EXTERNAL [ variable_attributes ] external_declaration* _END_VAR ";"*
+
+external_declaration: global_var_name ":" ( simple_specification | subrange_specification | enumerated_specification | array_specification | structure_type_name | function_block_type_name ) ";"+
+
+?global_var_name: IDENTIFIER
+PERSISTENT: _PERSISTENT
+
+?action_name: DOTTED_IDENTIFIER
+
+action: _ACTION action_name ":" [ function_block_body ] _END_ACTION ";"*
+
+global_var_declarations: _VAR_GLOBAL [ global_variable_attributes ] global_var_body_item* _END_VAR ";"*
+
+GLOBAL_VAR_ATTRIB: VAR_ATTRIB
+                 | _INTERNAL
+
+global_variable_attributes: GLOBAL_VAR_ATTRIB+
+
+?global_var_body_item: var_init_decl
+                     | global_var_decl
+
+global_var_decl: global_var_spec ":" ( _located_var_spec_init | function_call ) ";"+
+// Note - function_block_type_name is also valid here, but it is picked up by
+//   an equivalent rule
+//   function_block_type_name
+
+global_var_spec: global_var_list
+               | global_var_name (location | incomplete_location)
+
+_located_var_spec_init: simple_spec_init
+                      | subrange_spec_init
+                      | enumerated_spec_init
+                      | array_spec_init
+                      | initialized_structure
+                      | single_byte_string_spec
+                      | double_byte_string_spec
+
+location: _AT direct_variable
+
+global_var_list: global_var_name ( "," global_var_name )*
+
+bracketed_expression: "[" expression "]"
+
+string_spec_length: parenthesized_expression
+                  | bracketed_expression
+
+single_byte_string_spec: STRING [ string_spec_length ] [ ":=" SINGLE_BYTE_CHARACTER_STRING ]
+
+double_byte_string_spec: WSTRING [ string_spec_length ] [ ":=" DOUBLE_BYTE_CHARACTER_STRING ]
+
+incomplete_located_var_declarations: _VAR [ variable_attributes ] incomplete_located_var_decl* _END_VAR ";"*
+
+incomplete_located_var_decl: variable_name incomplete_location ":" var_spec ";"+
+
+incomplete_location: _AT /\%(I|Q|M)\*/
+STRING: /\bSTRING\b/i
+WSTRING: /\bWSTRING\b/i
+
+string_type_specification: (STRING | WSTRING) [ string_spec_length ]
+
+?var_spec: simple_specification
+         | subrange_specification
+         | enumerated_specification
+         | array_specification
+         | string_type_specification
+
+// B.1.5.1
+?derived_function_name: IDENTIFIER
+
+indirect_simple_specification: [ indirection_type ] simple_specification [ input_param_args ]
+
+input_param_args: "(" [ input_param_assignment ( "," input_param_assignment )* ","? ] ")"
+
+input_param_assignment: variable_name ":=" [ expression ]
+                      | expression
+
+function_declaration: _FUNCTION [ access_specifier ] derived_function_name [ ":" indirect_simple_specification ] ";"* [ function_var_block+ ] [ function_body ] _END_FUNCTION ";"*
+
+?function_var_block: input_declarations
+                   | output_declarations
+                   | input_output_declarations
+                   | static_var_declarations
+                   | external_var_declarations
+                   | function_var_declarations
+
+function_var_declarations: _VAR [ variable_attributes ] var_body _END_VAR ";"*
+
+?function_body: statement_list
+
+// B.1.5.2
+DOTTED_IDENTIFIER: IDENTIFIER ( "." IDENTIFIER )*
+?standard_function_block_name: IDENTIFIER
+?derived_function_block_name: IDENTIFIER
+
+?function_block_type_name: standard_function_block_name
+                         | derived_function_block_name
+
+
+ACCESS_SPECIFIER: _ABSTRACT
+                | _PUBLIC
+                | _PRIVATE
+                | _PROTECTED
+                | _INTERNAL
+                | _FINAL
+access_specifier: ACCESS_SPECIFIER+
+extends: _EXTENDS DOTTED_IDENTIFIER ("," DOTTED_IDENTIFIER)*
+implements: _IMPLEMENTS DOTTED_IDENTIFIER ("," DOTTED_IDENTIFIER)*
+
+function_block_type_declaration: FUNCTION_BLOCK [ access_specifier ] derived_function_block_name [ extends ] [ implements ] fb_var_declaration* [ function_block_body ] END_FUNCTION_BLOCK ";"*
+
+FUNCTION_BLOCK: _FUNCTION_BLOCK
+              | _FUNCTIONBLOCK
+
+END_FUNCTION_BLOCK: _END_FUNCTION_BLOCK
+                  | _END_FUNCTIONBLOCK
+
+?fb_var_declaration: input_declarations
+                   | output_declarations
+                   | input_output_declarations
+                   | external_var_declarations
+                   | var_declarations
+                   | var_inst_declaration
+                   | temp_var_decls
+                   | static_var_declarations
+                   | incomplete_located_var_declarations
+
+temp_var_decls: _VAR_TEMP var_body _END_VAR ";"*
+
+?function_block_body: statement_list
+
+var_inst_declaration: _VAR_INST [ variable_attributes ] var_body _END_VAR ";"*
+
+?method_var_declaration: fb_var_declaration
+                       | var_inst_declaration
+                       | static_var_declarations
+
+?method_return_type: _located_var_spec_init
+
+function_block_method_declaration: _METHOD [ access_specifier ] DOTTED_IDENTIFIER [ ":" method_return_type ] ";"* method_var_declaration* [ function_block_body ] _END_METHOD ";"*
+
+?property_var_declaration: fb_var_declaration
+
+?property_return_type: _located_var_spec_init
+
+function_block_property_declaration: _PROPERTY [ access_specifier ] DOTTED_IDENTIFIER [ ":" property_return_type ] [ access_specifier ] ";"* property_var_declaration* [ function_block_body ] _END_PROPERTY ";"*
+
+// B.1.5.3
+?program_type_name: IDENTIFIER
+
+program_declaration: _PROGRAM program_type_name program_var_declarations [ function_block_body ] _END_PROGRAM ";"*
+
+program_var_declarations: [ program_var_declaration+ ]
+
+?program_var_declaration: input_declarations
+                        | output_declarations
+                        | input_output_declarations
+                        | external_var_declarations
+                        | incomplete_located_var_declarations
+                        | located_var_declarations
+                        | program_access_decls
+                        | static_var_declarations
+                        | temp_var_decls
+                        | var_declarations
+
+program_access_decls: _VAR_ACCESS (program_access_decl ";"+)+ _END_VAR ";"*
+
+!?access_direction: _READ_WRITE
+                  | _READ_ONLY
+
+?access_name: IDENTIFIER
+
+program_access_decl: access_name ":" symbolic_variable ":" non_generic_type_name [ access_direction ]
+
+// Beckhoff/codesys-specific INTERFACE definition describing variables, methods,
+// and properties of other POUs
+
+?interface_var_declaration: input_declarations
+                          | output_declarations
+                          | input_output_declarations
+                          | external_var_declarations
+                          | var_declarations
+
+interface_declaration: _INTERFACE IDENTIFIER [ extends ] interface_var_declaration* _END_INTERFACE? ";"*
+
+// B.2.1, B.3.1
+LOGICAL_OR: _OR
+LOGICAL_XOR: _XOR
+LOGICAL_AND: _AND
+LOGICAL_NOT: _NOT
+LOGICAL_AND_THEN: _AND_THEN
+LOGICAL_OR_ELSE: _OR_ELSE
+MODULO: _MOD
+EQUALS: "="
+EQUALS_NOT: "<>"
+LESS_OR_EQUAL: "<="
+GREATER_OR_EQUAL: ">="
+LESS_THAN: "<"
+GREATER_THAN: ">"
+ADDING: "+"
+SUBTRACTING: "-"
+MULTIPLY_WITH: "*"
+DIVIDE_BY: "/"
+MINUS: "-"
+PLUS: "+"
+ASSIGNMENT: ":="
+
+expression: assignment_expression ( ASSIGNMENT assignment_expression )*
+
+assignment_expression: or_else_expression ( LOGICAL_OR_ELSE or_else_expression )*
+
+or_else_expression: and_then_expression ( LOGICAL_AND_THEN and_then_expression )*
+
+and_then_expression: xor_expression ( LOGICAL_OR xor_expression )*
+
+xor_expression: and_expression ( LOGICAL_XOR and_expression )*
+
+and_expression: comparison_expression ( LOGICAL_AND comparison_expression )*
+
+comparison_expression: equality_expression ( EQUALS_OP equality_expression )*
+
+EQUALS_OP: EQUALS
+         | EQUALS_NOT
+
+equality_expression: add_expression ( COMPARE_OP add_expression )*
+
+COMPARE_OP: LESS_OR_EQUAL
+          | GREATER_OR_EQUAL
+          | LESS_THAN
+          | GREATER_THAN
+
+add_expression: expression_term ( ADD_OPERATOR expression_term )*
+
+ADD_OPERATOR: ADDING
+            | SUBTRACTING
+
+expression_term: unary_expression ( MULTIPLY_OPERATOR unary_expression )*
+
+MULTIPLY_OPERATOR: MODULO
+                 | MULTIPLY_WITH
+                 | DIVIDE_BY
+
+unary_expression: [ UNARY_OPERATOR ] primary_expression
+
+UNARY_OPERATOR: LOGICAL_NOT
+              | MINUS
+              | PLUS
+
+function_call: symbolic_variable "(" [ param_assignment ( "," param_assignment )* ","? ] ")" DEREFERENCED?
+chained_function_call: function_call ( "." function_call )+
+
+parenthesized_expression: "(" expression ")"
+
+?primary_expression: parenthesized_expression
+                   | function_call
+                   | chained_function_call
+                   | _variable
+                   | constant
+
+// B.3.2
+statement_list: _statement+ end_of_statement_list_label?
+
+_statement: ";"
+          | assignment_statement
+          | no_op_statement
+          | set_statement
+          | reset_statement
+          | reference_assignment_statement
+          | return_statement
+          | chained_function_call_statement
+          | function_call_statement
+          | if_statement
+          | case_statement
+          | for_statement
+          | while_statement
+          | repeat_statement
+          | exit_statement
+          | continue_statement
+          | jmp_statement
+          | labeled_statement
+
+
+// B.3.2.1
+no_op_statement: _variable ";"+
+
+assignment_statement: _variable ASSIGNMENT ( _variable ASSIGNMENT )* expression ";"+
+
+SET_ASSIGNMENT: "S="i
+set_statement: _variable SET_ASSIGNMENT expression ";"+
+
+RESET_ASSIGNMENT: "R="i
+reset_statement: _variable RESET_ASSIGNMENT expression ";"+
+
+REF_ASSIGNMENT: "REF="i
+reference_assignment_statement: _variable REF_ASSIGNMENT expression ";"+
+
+// B.3.2.2
+return_statement.1: _RETURN ";"+
+// return_statement: priority > 0 so that it doesn't clash with no_op_statement
+
+function_call_statement: function_call ";"+
+
+chained_function_call_statement: chained_function_call ";"+
+
+param_assignment: [ LOGICAL_NOT ] variable_name "=>" [ expression ] -> output_parameter_assignment
+                | variable_name ":=" [ expression ]
+                | expression
+
+// B.3.2.3
+if_statement: _IF expression _THEN [ statement_list ] ( else_if_clause )* [ else_clause ] _END_IF ";"*
+else_if_clause: _ELSIF expression _THEN [ statement_list ]
+else_clause: _ELSE [ statement_list ]
+
+case_statement: _CASE expression _OF case_elements [ else_clause ] _END_CASE ";"*
+
+case_elements: case_element+
+
+case_element_statement_list: _case_element_statement+
+
+// Specifically exclude labeled statements as they are aliased to case
+// statements themselves:
+_case_element_statement: ";"
+                       | assignment_statement
+                       | no_op_statement
+                       | set_statement
+                       | reset_statement
+                       | reference_assignment_statement
+                       | return_statement
+                       | chained_function_call_statement
+                       | function_call_statement
+                       | if_statement
+                       | case_statement
+                       | for_statement
+                       | while_statement
+                       | repeat_statement
+                       | exit_statement
+                       | continue_statement
+                       | jmp_statement
+
+case_element: case_list ":" [ case_element_statement_list ]
+
+case_list: case_list_element ( "," case_list_element )*
+
+?case_list_element: subrange
+                  | integer_literal
+                  | bit_string_literal
+                  | boolean_literal
+                  | enumerated_value
+                  | symbolic_variable
+
+// B.3.2.4
+?control_variable: symbolic_variable
+
+for_statement: _FOR control_variable ":=" _for_list _DO statement_list _END_FOR ";"*
+
+_for_list: expression _TO expression [ _BY expression ]
+
+while_statement: _WHILE expression _DO statement_list _END_WHILE ";"*
+
+repeat_statement: _REPEAT statement_list _UNTIL expression _END_REPEAT ";"*
+
+exit_statement.1: _EXIT ";"+
+
+continue_statement.1: _CONTINUE ";"+
+
+LABEL: IDENTIFIER
+labeled_statement.1: LABEL ":" _statement
+
+// End-of-statement list may have a label associated with it:
+end_of_statement_list_label: LABEL ":"
+
+jmp_statement: _JMP LABEL ";"+
+
+// ** Keyword section **
+//
+// All keywords defined here must be:
+// * Named exactly as the IEC keyword in upper-case.
+// * Prefixed with underscore to not be captured during the transformer stage.
+// * Regular expressions with a suffix of 'i' for case insensitivity. (i.e., //i).
+// * Prefixed and suffixed with '\b', indicating word boundary handling. Without it,
+//   (b)lark may ignore whitespace much more than we want it to.
+// * Kept in sorted order
+
+_ABSTRACT: /\bABSTRACT\b/i
+_ACTION: /\bACTION\b/i
+_AND: /\bAND\b/i
+_AND_THEN: /\bAND_THEN\b/i
+_ANY: /\bANY\b/i
+_ANY_BIT: /\bANY_BIT\b/i
+_ANY_DATE: /\bANY_DATE\b/i
+_ANY_DERIVED: /\bANY_DERIVED\b/i
+_ANY_ELEMENTARY: /\bANY_ELEMENTARY\b/i
+_ANY_INT: /\bANY_INT\b/i
+_ANY_MAGNITUDE: /\bANY_MAGNITUDE\b/i
+_ANY_NUM: /\bANY_NUM\b/i
+_ANY_REAL: /\bANY_REAL\b/i
+_ANY_STRING: /\bANY_STRING\b/i
+_ARRAY: /\bARRAY\b/i
+_AT: /\bAT\b/i
+_BOOL: /\bBOOL\b/i
+_BY: /\bBY\b/i
+_BYTE: /\bBYTE\b/i
+_CASE: /\bCASE\b/i
+_CONTINUE: /\bCONTINUE\b/i
+_DATE: /\bDATE\b/i
+_DATE_AND_TIME: /\bDATE_AND_TIME\b/i
+_DINT: /\bDINT\b/i
+_DO: /\bDO\b/i
+_DT: /\bDT\b/i
+_DWORD: /\bDWORD\b/i
+_ELSE: /\bELSE\b/i
+_ELSIF: /\bELSIF\b/i
+_END_ACTION: /\bEND_ACTION\b/i
+_END_CASE: /\bEND_CASE\b/i
+_END_FOR: /\bEND_FOR\b/i
+_END_FUNCTION: /\bEND_FUNCTION\b/i
+_END_FUNCTIONBLOCK: /\bEND_FUNCTIONBLOCK\b/i
+_END_FUNCTION_BLOCK: /\bEND_FUNCTION_BLOCK\b/i
+_END_IF: /\bEND_IF\b/i
+_END_INTERFACE: /\bEND_INTERFACE\b/i
+_END_METHOD: /\bEND_METHOD\b/i
+_END_PROGRAM: /\bEND_PROGRAM\b/i
+_END_PROPERTY: /\bEND_PROPERTY\b/i
+_END_REPEAT: /\bEND_REPEAT\b/i
+_END_STRUCT: /\bEND_STRUCT\b/i
+_END_TYPE: /\bEND_TYPE\b/i
+_END_UNION: /\bEND_UNION\b/i
+_END_VAR: /\bEND_VAR\b/i
+_END_WHILE: /\bEND_WHILE\b/i
+_EXIT: /\bEXIT\b/i
+_EXTENDS: /\bEXTENDS\b/i
+_FINAL: /\bFINAL\b/i
+_FOR: /\bFOR\b/i
+_FUNCTION: /\bFUNCTION\b/i
+_FUNCTIONBLOCK: /\bFUNCTIONBLOCK\b/i
+_FUNCTION_BLOCK: /\bFUNCTION_BLOCK\b/i
+_IF: /\bIF\b/i
+_IMPLEMENTS: /\bIMPLEMENTS\b/i
+_INT: /\bINT\b/i
+_INTERFACE: /\bINTERFACE\b/i
+_INTERNAL: /\bINTERNAL\b/i
+_JMP: /\bJMP\b/i
+_LDATE: /\bLDATE\b/i
+_LDATE_AND_TIME: /\bLDATE_AND_TIME\b/i
+_LDT: /\bLDT\b/i
+_LINT: /\bLINT\b/i
+_LREAL: /\bLREAL\b/i
+_LTIME: /\bLTIME\b/i
+_LTIME_OF_DAY: /\bLTIME_OF_DAY\b/i
+_LTOD: /\bLTOD\b/i
+_LWORD: /\bLWORD\b/i
+_METHOD: /\bMETHOD\b/i
+_MOD: /\bMOD\b/i
+_NOT: /\bNOT\b/i
+_OF: /\bOF\b/i
+_OR: /\bOR\b/i
+_OR_ELSE: /\bOR_ELSE\b/i
+_PERSISTENT: /\bPERSISTENT\b/i
+_POINTER: /\bPOINTER\b/i
+_PRIVATE: /\bPRIVATE\b/i
+_PROGRAM: /\bPROGRAM\b/i
+_PROPERTY: /\bPROPERTY\b/i
+_PROTECTED: /\bPROTECTED\b/i
+_PUBLIC: /\bPUBLIC\b/i
+_READ_ONLY: /\bREAD_ONLY\b/i
+_READ_WRITE: /\bREAD_WRITE\b/i
+_REAL: /\bREAL\b/i
+_REFERENCE: /\bREFERENCE\b/i
+_REPEAT: /\bREPEAT\b/i
+_RETURN: /\bRETURN\b/i
+_SINT: /\bSINT\b/i
+_STRUCT: /\bSTRUCT\b/i
+_THEN: /\bTHEN\b/i
+_TIME: /\bTIME\b/i
+_TIME_OF_DAY: /\bTIME_OF_DAY\b/i
+_TO: /\bTO\b/i
+_TOD: /\bTOD\b/i
+_TYPE: /\bTYPE\b/i
+_UDINT: /\bUDINT\b/i
+_UINT: /\bUINT\b/i
+_ULINT: /\bULINT\b/i
+_UNION: /\bUNION\b/i
+_UNTIL: /\bUNTIL\b/i
+_USINT: /\bUSINT\b/i
+_VAR: /\bVAR\b/i
+_VAR_ACCESS: /\bVAR_ACCESS\b/i
+_VAR_EXTERNAL: /\bVAR_EXTERNAL\b/i
+_VAR_GLOBAL: /\bVAR_GLOBAL\b/i
+_VAR_INPUT: /\bVAR_INPUT\b/i
+_VAR_INST: /\bVAR_INST\b/i
+_VAR_IN_OUT: /\bVAR_IN_OUT\b/i
+_VAR_OUTPUT: /\bVAR_OUTPUT\b/i
+_VAR_STAT: /\bVAR_STAT\b/i
+_VAR_TEMP: /\bVAR_TEMP\b/i
+_WHILE: /\bWHILE\b/i
+_WORD: /\bWORD\b/i
+_XOR: /\bXOR\b/i
