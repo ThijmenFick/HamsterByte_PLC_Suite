@@ -1,9 +1,13 @@
+PROGRAM SimpleScript
 VAR
-led1=BOOL=%QX0.0=FALSE=NONE
-tPulse=TP=%T=NONE=NONE
-start=BOOL=%M=TRUE=NONE
+    machineReady AT %QX0.1 : BOOL := FALSE;
+    cycles       : INT := 8;
 END_VAR
 
-tPulse(IN := start, PT := T#2s);
-start := FALSE;
-beeper := tPulse.Q;
+IF cycles <> 0 THEN
+    cycles := cycles - 1;
+ELSE
+    machineReady := TRUE;
+END_IF
+
+END_PROGRAM
