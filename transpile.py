@@ -1,145 +1,67 @@
-from dataclasses import dataclass
-import sys
-import re
+from lark import Lark
+import json
 
-#Get the full size of objects for compiler
-def getDeepSize(obj, seen=None):
-    """Recursively finds the memory footprint of an object and all its contents."""
-    if seen is None:
-        seen = set()
+def parse_tree(lines):
+    root = {}
+    stack = [(root, -1)]  # (current_dict, indent_level)
 
-    objId = id(obj)
-    if objId in seen:
-        return 0  # Avoid double counting
-    seen.add(objId)
-
-    size = sys.getsizeof(obj)
-
-    if isinstance(obj, dict):
-        size += sum(getDeepSize(k, seen) + getDeepSize(v, seen) for k, v in obj.items())
-    elif isinstance(obj, (list, tuple, set, frozenset)):
-        size += sum(getDeepSize(i, seen) for i in obj)
-
-    return size
-
-def varTranspile(tag):
-    pretype = tag.type
-
-    replacements = {
-        "BOOL": "bool",
-        "INT": "int"
-    }
-    type = " ".join(replacements.get(word.strip(), word.strip()) for word in pretype.split(" "))
-
-    initValue = ""
-    if tag.initialValue == "FALSE" or tag.initialValue == "TRUE":
-        initValue = tag.initialValue.lower()
-    elif tag.initialValue == "NONE":
-        return f"{type} {tag.name};"
-    else:
-        initValue = tag.initialValue
-
-    return f"{type} {tag.name} = {initValue};"
-
-def transpile(line, statement):
-    if statement == "if":
-        content = line.removeprefix("IF").removesuffix("THEN").strip()
-        convertedData = ["if(", ") {"]
-
-        replacements = {
-            "AND": "&&",
-            "OR": "||",
-            "NOT": "!",
-            "<>": "!=",
-            "=": "=="
-        }
-
-        content = " ".join(replacements.get(word.strip(), word.strip()) for word in content.split(" "))
-
-        convertedData.insert(len(convertedData)//2, content)
-        return ''.join(convertedData)
-
-    elif statement == "varChange":
-        replaceLine = line.replace(":=", "=")
-        replacements = {
-            "FALSE": "false",
-            "TRUE": "true"
-        }
-
-        newLine = " ".join(replacements.get(word.strip(), word.strip()) for word in replaceLine.split(" "))
-
-@dataclass
-class Tag:
-    name: str
-    type: str
-    location: str
-    initialValue: any
-    comment: str
-
-#ROM for all tags from the tag table
-tagTable = [
-]
-
-linesBetween = []
-allLines = []
-with open("code.txt") as f:
-    for lineno, line in enumerate(f, start=1):
-        allLines.append(line.strip())
-        stripped = line.strip()
-        if stripped == "VAR":
-            insideBlock = True
-            continue
-        elif stripped == "END_VAR":
-            insideBlock = False
+    for line in lines:
+        if not line.strip():
             continue
 
-        if insideBlock:
-            linesBetween.append(line.strip())
-            newVar = line.strip().split("=")
-            if newVar[1] == "TP":
-                newTag = Tag(newVar[0], "int", newVar[2], newVar[3], newVar[4])
+        indent = len(line) - len(line.lstrip())
+        key_value = line.strip().split("\t")
 
+        # Handle key + optional value
+        key = key_value[0]
+        value = key_value[1] if len(key_value) > 1 else None
+
+        # Move up the stack until indent matches
+        while stack and stack[-1][1] >= indent:
+            stack.pop()
+
+        parent, _ = stack[-1]
+
+        # If key already exists, turn it into a list
+        if key in parent:
+            if not isinstance(parent[key], list):
+                parent[key] = [parent[key]]
+            entry = {} if value is None else value
+            parent[key].append(entry)
+            if isinstance(entry, dict):
+                stack.append((entry, indent))
+        else:
+            if value is None:
+                parent[key] = {}
+                stack.append((parent[key], indent))
             else:
-                newTag = Tag(newVar[0], newVar[1], newVar[2], newVar[3], newVar[4])
+                # Convert booleans and integers
+                if value in ("TRUE", "true"):
+                    parent[key] = True
+                elif value in ("FALSE", "false"):
+                    parent[key] = False
+                elif value.isdigit():
+                    parent[key] = int(value)
+                else:
+                    parent[key] = value
 
-            tagTable.append(newTag)
+    return root
 
-#Load in all tags into memory, change with tag_values["var"] = 2
-tagValues = {tag.name: tag.initialValue for tag in tagTable}
+with open("grammar.lark", "r", encoding="utf-8") as f:
+    grammar = f.read()
 
-#======== Find and Load all vars in mem ========#
-print(f"Found {len(linesBetween)} variable(s)")
-print(f"Loaded VARROM into RAM with a total of {getDeepSize(tagValues)} bytes in size")
+parser = Lark(grammar, start="start", parser="earley")
 
-#======== Generating C-headers based on packages and vars ========#
-print("Generating C-headers")
-with open("code.c", "a") as f:
-    f.write('#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <stdbool.h>\n#include "driver/gpio.h"\n#include "freertos/FreeRTOS.h"\n#include "freertos/task.h"\n\n')
+with open("code.txt", "r", encoding="utf-8") as f:
+    code = f.read()
 
-    for tag in tagTable:
-        f.write(f"{varTranspile(tag)}\n")
+tree = parser.parse(code)
 
-#======== Generating code (non runtime loop) ========#
+with open("output.txt", "w", encoding="utf-8") as f:
+    f.write(tree.pretty())
 
-for l in allLines:
-    if l.startswith("IF") and l.endswith("THEN"):
-        print("Detected a IF-statement")
-        print(transpile(l, "if"))
-
-    elif ":=" in l:
-        isVar = False
-        inside = False
-        for x in l:
-            if x == "(":
-                inside = True
-            elif x == ")":
-                inside = False
-
-            if x == ":" and not inside:
-                isVar = True
-
-        if isVar:
-            transpile(l, "varChange")
-
-    elif ""
-
+with open("output.json", "w", encoding="utf-8") as of:
+    with open("output.txt", "r", encoding="utf-8") as f:
+        lines = f.read().splitlines()
+        parsed = parse_tree(lines)
+        of.write(json.dumps(parsed, indent=2))
