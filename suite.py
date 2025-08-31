@@ -15,6 +15,7 @@ temp_dir_obj = tempfile.TemporaryDirectory(prefix="HamsterByteProject_")
 temp_dir = temp_dir_obj.name
 print(f"Using temporary directory: {temp_dir}")
 active_file = ""
+project_path = ""
 
 
 #======== icon initialize for message boxes ========#
@@ -54,7 +55,9 @@ def open_file_in_editor(file, root):
 
 #======== Object for file dialog for .plcp files for open project ========#
 def callback(sender, app_data):
+    global project_path
     print(f"Loaded project from {app_data["file_path_name"]}")
+    project_path = app_data["file_path_name"]
     with zipfile.ZipFile(app_data["file_path_name"], 'r') as zf:
         zf.extractall(temp_dir)
     dpg.set_value("project_name", f"Current: {app_data["file_name"]}")
@@ -70,7 +73,36 @@ with dpg.file_dialog(directory_selector=False, show=False, callback=callback, id
 #======== Detect file change and add * to filename ========#
 def on_text_change(sender, app_data, user_data):
     print(f"Current text: {app_data}")
-    dpg.configure_item(active_file, label=f"{active_file}*")
+    if active_file != "":
+        dpg.configure_item(active_file, label=f"{active_file}*")
+
+#======== Handle shortcuts: ctrl+s | save ========#
+def save_callback(sender, app_data):
+    if dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl):
+        global active_file, project_path
+        if not active_file or not project_path:
+            show_alert("error_icon", "Save Error", "No active project/file to save!")
+            return
+
+        # Write editor content back to temp_dir
+        file_path = os.path.join(temp_dir, active_file.replace("*", ""))
+        with open(file_path, "w") as f:
+            f.write(dpg.get_value(editor))
+
+        # Repack temp_dir into the existing .plcp project
+        with zipfile.ZipFile(project_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root_dir, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    abs_path = os.path.join(root_dir, file)
+                    arcname = os.path.relpath(abs_path, temp_dir)
+                    zf.write(abs_path, arcname)
+
+        # Remove the * marker in the GUI
+        dpg.configure_item(active_file, label=active_file.replace("*", ""))
+        show_alert("info_icon", "Saved", f"Project saved to {os.path.basename(project_path)}")
+
+with dpg.handler_registry():
+    dpg.add_key_press_handler(dpg.mvKey_S, callback=save_callback)
 
 #======== Main GUI window ========#
 with dpg.window(label="Main Window", tag="main_window",
