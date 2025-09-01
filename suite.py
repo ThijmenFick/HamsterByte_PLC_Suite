@@ -1,4 +1,5 @@
 import threading
+import time
 import zipfile
 import tempfile
 from PIL import Image
@@ -16,7 +17,6 @@ temp_dir = temp_dir_obj.name
 print(f"Using temporary directory: {temp_dir}")
 active_file = ""
 project_path = ""
-
 
 #======== icon initialize for message boxes ========#
 def load_texture(path, size=(32, 32)):
@@ -47,11 +47,11 @@ def open_file_in_editor(file, root):
     global active_file
     active_file = file
     print(active_file)
-    if file.endswith(".st"):
-        with open(os.path.join(root, file), "r") as file:
-            single_line_string = file.read()
+    dpg.configure_item(item="active_file_text", default_value=active_file)
+    with open(os.path.join(root, file), "r") as file:
+        single_line_string = file.read()
 
-        dpg.configure_item(editor, readonly=False, default_value=single_line_string)
+    dpg.configure_item(editor, readonly=False, default_value=single_line_string)
 
 #======== Object for file dialog for .plcp files for open project ========#
 def callback(sender, app_data):
@@ -128,8 +128,9 @@ with dpg.window(label="Main Window", tag="main_window",
             dpg.add_text("No PLC Project opened!", tag="project_name")
 
         with dpg.child_window(tag="right_window", autosize_x=True, autosize_y=True, border=True):
+            dpg.add_text(default_value="No File opened", tag="active_file_text")
             editor = dpg.add_input_text(
-                default_value="This is initially read-only",
+                default_value="Open a project or file to start editing",
                 multiline=True,
                 width=-1,
                 height=-1,
