@@ -1,0 +1,15 @@
+PROGRAM SimpleProgram
+VAR
+cycle AT %QX0.0 : INT := 0;
+cycle : INT := 0;
+END_VAR
+
+IF cycle <> 5 THEN
+cycle := cycle + 1;
+END_IF
+END_PROGRAM
+
+program_declaration: {program_name}
+- program_var_declarations
+-- var_declarations
+--- var_body
