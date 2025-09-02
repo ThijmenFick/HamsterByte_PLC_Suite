@@ -47,34 +47,78 @@ def open_file_in_editor(file, root):
     global active_file
     active_file = file
     print(active_file)
-    if file.endswith(".st"):
-        with open(os.path.join(root, file), "r") as file:
-            single_line_string = file.read()
+    dpg.configure_item(item="active_file_text", default_value=active_file)
+    with open(os.path.join(root, file), "r") as file:
+        single_line_string = file.read()
 
-        dpg.configure_item(editor, readonly=False, default_value=single_line_string)
+    dpg.configure_item(editor, readonly=False, default_value=single_line_string)
+
+
+# ======== File operations (delete/rename) ======== #
+def delete_file(file, root):
+    try:
+        os.remove(os.path.join(root, file))
+        dpg.delete_item(file)  # remove from UI
+        show_alert("alert_icon", "Deleted", f"Deleted {file}")
+    except Exception as e:
+        show_alert("error_icon", "Error", str(e))
+
+def rename_file(file, root):
+    old_path = os.path.join(root, file)
+    new_name = f"{file}_new"
+    new_path = os.path.join(root, new_name)
+    try:
+        os.rename(old_path, new_path)
+        dpg.configure_item(file, label=new_name)
+        show_alert("info_icon", "Renamed", f"{file} → {new_name}")
+    except Exception as e:
+        show_alert("error_icon", "Error", str(e))
+
+def show_context_menu(sender, app_data, user_data):
+    file, root = user_data
+    with dpg.popup(sender, mousebutton=dpg.mvMouseButton_Right, modal=False):
+        dpg.add_menu_item(label="Open", callback=lambda: open_file_in_editor(file, root))
+        dpg.add_menu_item(label="Delete", callback=lambda: delete_file(file, root))
+        dpg.add_menu_item(label="Rename", callback=lambda: rename_file(file, root))
+
 
 #======== Object for file dialog for .plcp files for open project ========#
 def callback(sender, app_data):
     global project_path
-    print(f"Loaded project from {app_data["file_path_name"]}")
+    print(f"Loaded project from {app_data['file_path_name']}")
     project_path = app_data["file_path_name"]
     with zipfile.ZipFile(app_data["file_path_name"], 'r') as zf:
         zf.extractall(temp_dir)
-    dpg.set_value("project_name", f"Current: {app_data["file_name"]}")
+    dpg.set_value("project_name", f"Current: {app_data['file_name']}")
     for root, dirs, files in os.walk(temp_dir):
         for file in files:
-            dpg.add_button(label=file, callback=lambda s, a, u: open_file_in_editor(u, root), user_data=file, parent="left_window", tag=file)
+            btn = dpg.add_button(
+                label=file,
+                callback=lambda s, a, u=(file, root): open_file_in_editor(*u),
+                parent="left_window",
+                tag=file
+            )
+            # Add right-click context menu
+            with dpg.popup(btn, mousebutton=dpg.mvMouseButton_Right):
+                dpg.add_menu_item(label="Open", callback=lambda s, a, u=(file, root): open_file_in_editor(*u))
+                dpg.add_menu_item(label="Rename", callback=lambda s, a, u=(file, root): rename_file(*u))
+                dpg.add_menu_item(label="Delete", callback=lambda s, a, u=(file, root): delete_file(*u))
+
             print(file)
-    show_alert("info_icon", "Loaded PLCP", f"Loaded PLC-Project {app_data["file_name"]}")
+
+    show_alert("info_icon", "Loaded PLCP", f"Loaded PLC-Project {app_data['file_name']}")
+
 
 with dpg.file_dialog(directory_selector=False, show=False, callback=callback, id="file_dialog_id", width=700 ,height=400):
     dpg.add_file_extension("PLC Projects (*.plcp){.plcp}", color=(0, 255, 255, 255))
+
 
 #======== Detect file change and add * to filename ========#
 def on_text_change(sender, app_data, user_data):
     print(f"Current text: {app_data}")
     if active_file != "":
         dpg.configure_item(active_file, label=f"{active_file}*")
+
 
 #======== Handle shortcuts: ctrl+s | save ========#
 def save_callback(sender, app_data):
@@ -104,6 +148,7 @@ def save_callback(sender, app_data):
 with dpg.handler_registry():
     dpg.add_key_press_handler(dpg.mvKey_S, callback=save_callback)
 
+
 #======== Main GUI window ========#
 with dpg.window(label="Main Window", tag="main_window",
                 pos=[0, 0],
@@ -122,12 +167,12 @@ with dpg.window(label="Main Window", tag="main_window",
         with dpg.menu(label="About"):
             dpg.add_menu_item(label="Info", callback=lambda: show_alert("info_icon", "About", "HamsterByte PLC Suite is the official software to work with the HamsterBytes PLC line"))
 
-
     with dpg.group(horizontal=True):
         with dpg.child_window(tag="left_window", width=250, autosize_y=True, border=True):
             dpg.add_text("No PLC Project opened!", tag="project_name")
 
         with dpg.child_window(tag="right_window", autosize_x=True, autosize_y=True, border=True):
+            dpg.add_text(default_value="No File opened", tag="active_file_text")
             editor = dpg.add_input_text(
                 default_value="This is initially read-only",
                 multiline=True,
@@ -136,6 +181,7 @@ with dpg.window(label="Main Window", tag="main_window",
                 readonly=True,
                 callback=on_text_change
             )
+
 
 def resize_main_window(sender, app_data):
     width, height = dpg.get_viewport_client_width(), dpg.get_viewport_client_height()

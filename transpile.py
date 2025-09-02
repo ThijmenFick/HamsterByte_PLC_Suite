@@ -1,67 +1,29 @@
-from lark import Lark
-import json
+import zipfile
+import tempfile
+import os
 
-def parse_tree(lines):
-    root = {}
-    stack = [(root, -1)]  # (current_dict, indent_level)
+# Create a temporary directory
+temp_dir_obj = tempfile.TemporaryDirectory(prefix="HamsterByteProject_")
+temp_dir = temp_dir_obj.name
 
-    for line in lines:
-        if not line.strip():
-            continue
+# Path to your zip file
+zip_path = "SimpleProject.plcp"
 
-        indent = len(line) - len(line.lstrip())
-        key_value = line.strip().split("\t")
+# Extract contents to the temporary directory
+with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+    zip_ref.extractall(temp_dir)
 
-        # Handle key + optional value
-        key = key_value[0]
-        value = key_value[1] if len(key_value) > 1 else None
+def st_to_c(filepath):
 
-        # Move up the stack until indent matches
-        while stack and stack[-1][1] >= indent:
-            stack.pop()
 
-        parent, _ = stack[-1]
 
-        # If key already exists, turn it into a list
-        if key in parent:
-            if not isinstance(parent[key], list):
-                parent[key] = [parent[key]]
-            entry = {} if value is None else value
-            parent[key].append(entry)
-            if isinstance(entry, dict):
-                stack.append((entry, indent))
-        else:
-            if value is None:
-                parent[key] = {}
-                stack.append((parent[key], indent))
-            else:
-                # Convert booleans and integers
-                if value in ("TRUE", "true"):
-                    parent[key] = True
-                elif value in ("FALSE", "false"):
-                    parent[key] = False
-                elif value.isdigit():
-                    parent[key] = int(value)
-                else:
-                    parent[key] = value
 
-    return root
+# Print the full paths of the extracted files
+for root, dirs, files in os.walk(temp_dir):
+    for file in files:
+        print(os.path.join(root, file))
 
-with open("grammar.lark", "r", encoding="utf-8") as f:
-    grammar = f.read()
-
-parser = Lark(grammar, start="start", parser="earley")
-
-with open("code.txt", "r", encoding="utf-8") as f:
-    code = f.read()
-
-tree = parser.parse(code)
-
-with open("output.txt", "w", encoding="utf-8") as f:
-    f.write(tree.pretty())
-
-with open("output.json", "w", encoding="utf-8") as of:
-    with open("output.txt", "r", encoding="utf-8") as f:
-        lines = f.read().splitlines()
-        parsed = parse_tree(lines)
-        of.write(json.dumps(parsed, indent=2))
+        if file.endswith(".st"):
+            print("Structured Text")
+        elif file.endswith(".tb"):
+            print("Table File")
