@@ -13,3 +13,32 @@ program_declaration: {program_name}
 - program_var_declarations
 -- var_declarations
 --- var_body
+---- var1_init_decl
+----- var1_list
+------ var1
+#var name
+------- variable_name: {variable_name}
+#physical location when used
+------- location
+-------- direct_variable: {physical location} || empty when not given
+#intitial value
+----- simple_spec_init
+------ simple_specification: {var_type}
+#var type
+----- expression
+------ assignment_expression
+------- or_else_expression
+-------- and_then_expression
+--------- xor_expression
+---------- and_expression
+----------- comparison_expression
+------------ equality_expression
+------------- add_expression
+-------------- expression_term
+--------------- constant
+---------------- integer_literal
+----------------- integer/true/false: {value}
+
+
+
+- statement_list
